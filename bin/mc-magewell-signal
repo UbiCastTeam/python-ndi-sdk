@@ -1,0 +1,14 @@
+#! /usr/bin/env python3
+from magewell.lib_magewell import MWCapture
+
+
+def main():
+    mwcapture = MWCapture()
+    mwcapture.start()
+    locked_signal_str = mwcapture.get_locked_signal()
+    mwcapture.stop()
+    print(locked_signal_str, end='')
+
+
+if __name__ == '__main__':
+    main()
