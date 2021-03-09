@@ -379,7 +379,7 @@ class MWCapture():
                         if self._signal_status.state == MWCAP_VIDEO_SIGNAL_STATE.MWCAP_VIDEO_SIGNAL_NONE.value \
                            or self._signal_status.state == MWCAP_VIDEO_SIGNAL_STATE.MWCAP_VIDEO_SIGNAL_UNSUPPORTED.value \
                            or self._signal_status.state == MWCAP_VIDEO_SIGNAL_STATE.MWCAP_VIDEO_SIGNAL_LOCKING.value:
-                            logger.error('No signal')
+                            result += f'{self._info.szBoardSerialNo.decode()} No signal\n'
                         elif self._signal_status.state == MWCAP_VIDEO_SIGNAL_STATE.MWCAP_VIDEO_SIGNAL_LOCKED.value:
                             self._libMWCapture.MWGetInputSpecificStatus(self._h_channel, byref(self._input_status))
                             result += self._format_locked_signal(self._info, self._signal_status, self._input_status)
