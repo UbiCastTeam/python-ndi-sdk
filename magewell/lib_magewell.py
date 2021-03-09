@@ -1,8 +1,10 @@
 #! /usr/bin/python3
 import logging
+import pydbus
 from ctypes import c_short, c_char, c_byte, c_int, c_void_p, c_bool, Structure, Union, byref, CDLL, create_string_buffer
 from ctypes.util import find_library
 from enum import Enum, auto
+from gi.repository import GLib
 
 logger = logging.getLogger('mc-magewell-signal')
 
@@ -277,6 +279,15 @@ class MWCAP_INPUT_SPECIFIC_STATUS(Structure):
 
 
 class MWCapture():
+    """
+        <node>
+          <interface name='com.magewell.MWCapture'>
+            <method name='get_locked_signal'>
+              <arg type='s' name='response' direction='out'/>
+            </method>
+          </interface>
+        </node>
+    """
     LIBMWCAPTURE_NAME = 'MWCapture'
     FILTER_FAMILY_NAME = b'USB Capture'
     FILTER_PRODUCT_NAME = b'Seneca USB Capture HDMI'
@@ -396,3 +407,24 @@ class MWCapture():
             else:
                 logger.error('cannot get channel info')
         return result
+
+
+class MWCaptureDaemon():
+    def __init__(self):
+        self._bus = pydbus.SystemBus()
+        self._bus_handler = None
+        self._mwcapture = MWCapture()
+        self._mainloop = GLib.MainLoop()
+
+    def run(self):
+        if not self._bus_handler:
+            self._mwcapture.start()
+            self._bus_handler = self._bus.publish('com.magewell.MWCapture', self._mwcapture)
+            self._mainloop.run()
+
+    def quit(self):
+        if self._bus_handler:
+            self._mainloop.quit()
+            self._bus_handler.unpublish()
+            self._mwcapture.stop()
+            self._bus_handler = None

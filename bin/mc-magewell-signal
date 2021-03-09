@@ -1,12 +1,13 @@
 #! /usr/bin/env python3
-from magewell.lib_magewell import MWCapture
+from pydbus import SystemBus
+
+BUS_NAME = 'com.magewell.MWCapture'
 
 
 def main():
-    mwcapture = MWCapture()
-    mwcapture.start()
-    locked_signal_str = mwcapture.get_locked_signal()
-    mwcapture.stop()
+    bus = SystemBus()
+    service = bus.get(BUS_NAME)
+    locked_signal_str = service.get_locked_signal()
     print(locked_signal_str, end='')
 
 

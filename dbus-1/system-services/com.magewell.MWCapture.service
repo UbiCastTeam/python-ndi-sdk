@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=com.magewell.MWCapture
+Exec=/usr/bin/mw-capture-dbus-daemon
+User=root

@@ -1,0 +1,11 @@
+#! /usr/bin/env python3
+from magewell.lib_magewell import MWCaptureDaemon
+
+
+def main():
+    mwcapturedaemon = MWCaptureDaemon()
+    mwcapturedaemon.run()
+
+
+if __name__ == '__main__':
+    main()
