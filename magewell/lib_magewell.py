@@ -283,10 +283,14 @@ class MWCapture():
 
     def __init__(self):
         self._libMWCapture = None
-        self._h_channel = None
+        self._h_channels = []
         self._info = MWCAP_CHANNEL_INFO()
         self._signal_status = MWCAP_VIDEO_SIGNAL_STATUS()
         self._input_status = MWCAP_INPUT_SPECIFIC_STATUS()
+
+    def __del__(self):
+        # body of destructor
+        self.stop()
 
     def start(self):
         if not self._libMWCapture:
@@ -303,7 +307,36 @@ class MWCapture():
                     self._libMWCapture.MWGetVideoSignalStatus.argtypes = [c_void_p, c_void_p]
                     self._libMWCapture.MWGetInputSpecificStatus.argtypes = [c_void_p, c_void_p]
                     self._libMWCapture.MWCloseChannel.argtypes = [c_void_p]
-                    if not self._libMWCapture.MWCaptureInitInstance():
+                    if self._libMWCapture.MWCaptureInitInstance():
+                        self._libMWCapture.MWRefreshDevice()
+                        channel_count = self._libMWCapture.MWGetChannelCount()
+                        dev_channels = []
+
+                        for i in range(channel_count):
+                            self._libMWCapture.MWGetChannelInfoByIndex(i, byref(self._info))
+                            if self._info.szFamilyName != self.FILTER_FAMILY_NAME:
+                                continue
+                            if self._info.szProductName != self.FILTER_PRODUCT_NAME:
+                                continue
+                            dev_channels.append(i)
+
+                        if not dev_channels:
+                            logger.error('cannot find usb channels')
+
+                        for dev_channel in dev_channels:
+                            if self._libMWCapture.MWGetChannelInfoByIndex(dev_channel, byref(self._info)) != MW_RESULT.MW_SUCCEEDED.value:
+                                logger.error('cannot get channel info')
+                                continue
+
+                            path = create_string_buffer(b'\0', 128)
+                            self._libMWCapture.MWGetDevicePath(dev_channel, path)
+
+                            h_channel = self._libMWCapture.MWOpenChannelByPath(path)
+                            if h_channel:
+                                self._h_channels.append(h_channel)
+                            else:
+                                logger.error('cannot open channel')
+                    else:
                         self._libMWCapture = None
                         logger.error('MWCaptureInitInstance failed')
                 else:
@@ -313,6 +346,9 @@ class MWCapture():
 
     def stop(self):
         if self._libMWCapture:
+            for h_channel in self._h_channels:
+                self._libMWCapture.MWCloseChannel(h_channel)
+            self._h_channels.clear()
             self._libMWCapture.MWCaptureExitInstance()
             self._libMWCapture = None
 
@@ -347,46 +383,16 @@ class MWCapture():
 
     def get_locked_signal(self):
         result = ""
-        if self._libMWCapture:
-            self._libMWCapture.MWRefreshDevice()
-            channel_count = self._libMWCapture.MWGetChannelCount()
-            dev_channels = []
-
-            for i in range(channel_count):
-                self._libMWCapture.MWGetChannelInfoByIndex(i, byref(self._info))
-                if self._info.szFamilyName != self.FILTER_FAMILY_NAME:
-                    continue
-                if self._info.szProductName != self.FILTER_PRODUCT_NAME:
-                    continue
-                dev_channels.append(i)
-
-            if not dev_channels:
-                logger.error('cannot find usb channels')
-
-            for dev_channel in dev_channels:
-                if self._libMWCapture.MWGetChannelInfoByIndex(dev_channel, byref(self._info)) != MW_RESULT.MW_SUCCEEDED.value:
-                    logger.error('cannot get channel info')
-                    continue
-
-                path = create_string_buffer(b'\0', 128)
-                self._libMWCapture.MWGetDevicePath(dev_channel, path)
-
-                self._h_channel = self._libMWCapture.MWOpenChannelByPath(path)
-
-                if self._h_channel:
-                    if self._libMWCapture.MWGetChannelInfo(self._h_channel, byref(self._info)) == MW_RESULT.MW_SUCCEEDED.value:
-                        self._libMWCapture.MWGetVideoSignalStatus(self._h_channel, byref(self._signal_status))
-                        if self._signal_status.state == MWCAP_VIDEO_SIGNAL_STATE.MWCAP_VIDEO_SIGNAL_NONE.value \
-                           or self._signal_status.state == MWCAP_VIDEO_SIGNAL_STATE.MWCAP_VIDEO_SIGNAL_UNSUPPORTED.value \
-                           or self._signal_status.state == MWCAP_VIDEO_SIGNAL_STATE.MWCAP_VIDEO_SIGNAL_LOCKING.value:
-                            result += f'{self._info.szBoardSerialNo.decode()} No signal\n'
-                        elif self._signal_status.state == MWCAP_VIDEO_SIGNAL_STATE.MWCAP_VIDEO_SIGNAL_LOCKED.value:
-                            self._libMWCapture.MWGetInputSpecificStatus(self._h_channel, byref(self._input_status))
-                            result += self._format_locked_signal(self._info, self._signal_status, self._input_status)
-                    else:
-                        logger.error('cannot get channel info')
-                    self._libMWCapture.MWCloseChannel(self._h_channel)
-                    self._h_channel = None
-                else:
-                    logger.error('cannot open channel')
+        for h_channel in self._h_channels:
+            if self._libMWCapture.MWGetChannelInfo(h_channel, byref(self._info)) == MW_RESULT.MW_SUCCEEDED.value:
+                self._libMWCapture.MWGetVideoSignalStatus(h_channel, byref(self._signal_status))
+                if self._signal_status.state == MWCAP_VIDEO_SIGNAL_STATE.MWCAP_VIDEO_SIGNAL_NONE.value \
+                   or self._signal_status.state == MWCAP_VIDEO_SIGNAL_STATE.MWCAP_VIDEO_SIGNAL_UNSUPPORTED.value \
+                   or self._signal_status.state == MWCAP_VIDEO_SIGNAL_STATE.MWCAP_VIDEO_SIGNAL_LOCKING.value:
+                    result += f'{self._info.szBoardSerialNo.decode()} No signal\n'
+                elif self._signal_status.state == MWCAP_VIDEO_SIGNAL_STATE.MWCAP_VIDEO_SIGNAL_LOCKED.value:
+                    self._libMWCapture.MWGetInputSpecificStatus(h_channel, byref(self._input_status))
+                    result += self._format_locked_signal(self._info, self._signal_status, self._input_status)
+            else:
+                logger.error('cannot get channel info')
         return result
